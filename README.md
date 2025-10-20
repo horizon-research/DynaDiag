@@ -19,4 +19,3 @@ Notes: the script will download MNIST to `--data-dir` if missing. Use `--linear-
 1) MLP Example (without speedup)
 2) CUDA Kernel
 3) Integrated CUDA kernel in PyTorch
-4) Reproducibility Guide
