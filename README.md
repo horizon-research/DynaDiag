@@ -16,7 +16,7 @@ python MLP/mlp.py --linear-type temp_diag --hidden-dims 256 256 --epochs 100 --b
 Notes: the script will download MNIST to `--data-dir` if missing. Use `--linear-type dense` for a dense baseline, and `--force-cpu` to run on CPU.
 
 # ToDos
-1) MLP Example
+1) MLP Example (without speedup)
 2) CUDA Kernel
 3) Integrated CUDA kernel in PyTorch
 4) Reproducibility Guide
