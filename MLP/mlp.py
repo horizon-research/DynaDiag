@@ -136,26 +136,19 @@ class TemperatureScheduler:
         if self.scheme == "constant":
             return self.temp_start
         if self.scheme == "linear":
-            # Linear from start -> end across epochs
             alpha = e / max(1, T - 1)
             return (1 - alpha) * self.temp_start + alpha * self.temp_end
-        if self.scheme == "cosine":
-            # Cosine between [temp_max, temp_min]
-            # Defaults: temp_max=temp_start, temp_min=temp_end
             import math as _math
             prog = e / max(1, T - 1)
             return self.temp_min + 0.5 * (self.temp_max - self.temp_min) * (1 + _math.cos(_math.pi * prog))
         if self.scheme == "exponential":
-            # temp = start * gamma^e, clipped to [temp_end, inf)
             val = self.temp_start * (self.gamma ** e)
             return max(self.temp_end, val)
         if self.scheme == "step":
-            # Every step_size epochs, multiply by gamma, clipped to [temp_end, inf)
             k = e // self.step_size
             val = self.temp_start * (self.gamma ** k)
             return max(self.temp_end, val)
         if self.scheme == "warmup_cosine":
-            # Warmup from start -> max, then cosine to min
             import math as _math
             if e < self.warmup_epochs:
                 alpha = e / max(1, self.warmup_epochs)
@@ -165,7 +158,6 @@ class TemperatureScheduler:
             prog = (e - self.warmup_epochs) / max(1, rem - 1)
             return self.temp_min + 0.5 * (self.temp_max - self.temp_min) * (1 + _math.cos(_math.pi * prog))
         if self.scheme == "cyclic":
-            # Split into cycles and do cosine in each cycle
             import math as _math
             cycle_len = max(1, T // self.cycles)
             pos_in_cycle = e % cycle_len
@@ -250,12 +242,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--linear-type", type=str, choices=["dense", "temp_diag"], default="dense")
     parser.add_argument("--bias", action="store_true", help="Use bias in linear layers")
 
-    # TempSoftmaxDiagLinear specific
     parser.add_argument("--sparsity", type=float, default=0.9, help="Sparsity for TempSoftmaxDiagLinear (fraction of zeros)")
     parser.add_argument("--temperature", type=float, default=1.0, help="Initial temperature for TempSoftmaxDiagLinear")
     parser.add_argument("--chunk-size", type=int, default=64, help="Chunk size for TempSoftmaxDiagLinear computation")
 
-    # Temperature scheduling
     parser.add_argument(
         "--temp-schedule",
         type=str,
@@ -272,7 +262,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temp-step-size", type=int, default=10, help="Epochs per step for step schedule")
     parser.add_argument("--temp-cycles", type=int, default=1, help="Number of cycles for cyclic schedule")
 
-    # Alpha monitoring and freeze modes
     parser.add_argument("--alpha-nnz-threshold", type=float, default=1e-6, help="Threshold to count non-zero alpha weights")
     parser.add_argument(
         "--alpha-freeze-mode",
@@ -334,7 +323,6 @@ def main():
         device=device,
     )
 
-    # Determine if model uses TempSoftmaxDiagLinear and build scheduler only if needed
     uses_temp_layers = any(True for _ in iter_temp_layers(model))
     if uses_temp_layers:
         temp_start = args.temp_start if args.temp_start is not None else args.temperature
@@ -355,10 +343,8 @@ def main():
     else:
         temp_sched = None
 
-    # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-    # Optional W&B
     use_wandb = bool(args.wandb)
     if use_wandb and not _WANDB_AVAILABLE:
         print("wandb not installed; disable --wandb or install wandb.")
@@ -393,27 +379,24 @@ def main():
             })
         wandb.init(project=args.wandb_project, entity=args.wandb_entity, name=args.wandb_run_name, config=wb_config)
 
-    # Train
-    # Handle alpha freeze modes
+
     def try_freeze_alpha(epoch_one_based: int):
         if not uses_temp_layers:
             return
         if args.alpha_freeze_mode == "at_start" and epoch_one_based == 1:
             for layer in iter_temp_layers(model):
-                layer.freeze_topk()  # use layer.K
+                layer.freeze_topk() 
         elif args.alpha_freeze_mode == "at_epoch" and epoch_one_based == args.alpha_freeze_epoch:
             for layer in iter_temp_layers(model):
                 layer.freeze_topk()
 
     for epoch in range(1, args.epochs + 1):
-        # Update temperature per epoch only if using TempSoftmaxDiagLinear
         current_temp = None
         if uses_temp_layers and temp_sched is not None:
             current_temp = temp_sched.get(epoch - 1)
             for layer in iter_temp_layers(model):
                 layer.set_temperature(current_temp)
 
-        # Maybe freeze alpha according to schedule
         try_freeze_alpha(epoch)
 
         train_loss = train_one_epoch(model, train_loader, optimizer, device)
@@ -423,24 +406,31 @@ def main():
         else:
             print(f"Epoch {epoch:02d} | loss={train_loss:.4f} | acc={acc*100:.2f}%")
 
-        # Per-layer alpha monitoring (non-zeros by threshold)
         if uses_temp_layers:
             alpha_stats = {}
             layer_idx = 0
             for layer in iter_temp_layers(model):
-                # We want to count non-zero weights effectively in the gating vector actually used
                 weights = layer.get_alpha_weights().detach()
                 nnz = (weights.abs() > args.alpha_nnz_threshold).sum().item()
                 total = int(weights.numel())
                 alpha_stats[f"layer{layer_idx}/alpha_nnz"] = nnz
                 alpha_stats[f"layer{layer_idx}/alpha_density"] = nnz / max(1, total)
+                
+                effective_k = layer.get_effective_k(threshold=args.alpha_nnz_threshold)
+                effective_sparsity = layer.get_effective_sparsity(threshold=args.alpha_nnz_threshold)
+                target_k = layer.K
+                
+                alpha_stats[f"layer{layer_idx}/effective_k"] = effective_k
+                alpha_stats[f"layer{layer_idx}/target_k"] = target_k
+                alpha_stats[f"layer{layer_idx}/effective_sparsity"] = effective_sparsity
+                alpha_stats[f"layer{layer_idx}/k_ratio"] = effective_k / max(1, target_k)
+                
                 layer_idx += 1
-            # Print concise summary to console
             if alpha_stats:
-                dens_str = ", ".join([f"{k.split('/')[0]}={alpha_stats[k+'/alpha_density']:.3f}" for k in sorted({k.split('/')[0] for k in alpha_stats if k.endswith('/alpha_density')})])
-                # Fall back to printing dict if comprehension is complex
+                k_str = ", ".join([f"{k.split('/')[0]}: k_eff={alpha_stats[k+'/effective_k']:.1f}/{alpha_stats[k+'/target_k']:.1f} (sp={alpha_stats[k+'/effective_sparsity']:.3f})" 
+                                   for k in sorted({k.split('/')[0] for k in alpha_stats if k.endswith('/effective_k')})])
                 try:
-                    print(f"  alpha densities: {dens_str}")
+                    print(f"  {k_str}")
                 except Exception:
                     print(f"  alpha stats: {alpha_stats}")
 
