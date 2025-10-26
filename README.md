@@ -10,7 +10,21 @@ Use the `environment.yml` file to create a conda environment as:
 Run the MNIST MLP training from the repository root. Example (TempSoftmaxDiagLinear):
 
 ```bash
-python MLP/mlp.py --linear-type temp_diag --hidden-dims 256 256 --epochs 100 --batch-size 128 --data-dir ./mnist
+python mlp.py \
+  --linear-type temp_diag \
+  --hidden-dims 256 256 \
+  --sparsity 0.50 \
+  --temp-schedule cosine \
+  --temp-start 5.0 \
+  --temp-end 0.05 \
+  --temp-min 0.05 \
+  --temp-max 5.0 \
+  --epochs 100 \
+  --alpha-freeze-mode at_epoch \
+  --alpha-freeze-epoch 30 \
+  --lr 1e-3 \
+  --batch-size 128 \
+  --wandb
 ```
 
 Notes: the script will download MNIST to `--data-dir` if missing. Use `--linear-type dense` for a dense baseline, and `--force-cpu` to run on CPU.
