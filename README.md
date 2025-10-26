@@ -5,7 +5,7 @@ This repository contains the implementation of our ICML 2025 paper titled "[Dyna
 Use the `environment.yml` file to create a conda environment as:
 `conda env create -f environment.yml`
 
-# MLP Example
+# MLP Example (Without Speedup)
 
 Run the MNIST MLP training from the repository root. Example (TempSoftmaxDiagLinear):
 
