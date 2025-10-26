@@ -5,7 +5,7 @@ This repository contains the implementation of our ICML 2025 paper titled "[Dyna
 Use the `environment.yml` file to create a conda environment as:
 `conda env create -f environment.yml`
 
-# MLP Example (Without Speedup)
+# MLP Example
 
 Run the MNIST MLP training from the repository root. Example (TempSoftmaxDiagLinear):
 
@@ -13,7 +13,7 @@ Run the MNIST MLP training from the repository root. Example (TempSoftmaxDiagLin
 python mlp.py \
   --linear-type temp_diag \
   --hidden-dims 256 256 \
-  --sparsity 0.50 \
+  --sparsity 0.5 \
   --temp-schedule cosine \
   --temp-start 5.0 \
   --temp-end 0.05 \
