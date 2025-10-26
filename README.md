@@ -5,6 +5,9 @@ This repository contains the implementation of our ICML 2025 paper titled "[Dyna
 Use the `environment.yml` file to create a conda environment as:
 `conda env create -f environment.yml`
 
+# Usage
+To sparsify a lineary layer with DynaDiag, just specify `--linear-type temp_diag`, set sparsity for the layer and provide the temperatures and a temperature scheduler as shown in the MLP example below.
+
 # MLP Example
 
 Run the MNIST MLP training from the repository root. Example (TempSoftmaxDiagLinear):
