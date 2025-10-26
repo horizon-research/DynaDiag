@@ -138,6 +138,7 @@ class TemperatureScheduler:
         if self.scheme == "linear":
             alpha = e / max(1, T - 1)
             return (1 - alpha) * self.temp_start + alpha * self.temp_end
+        if self.scheme == "cosine":
             import math as _math
             prog = e / max(1, T - 1)
             return self.temp_min + 0.5 * (self.temp_max - self.temp_min) * (1 + _math.cos(_math.pi * prog))
@@ -295,7 +296,6 @@ def main():
     device = get_device(force_cpu=args.force_cpu)
 
     if args.linear_type == "temp_diag" and device.type == "cpu":
-        # It's fine to run on CPU but warn about performance
         print("Warning: TempSoftmaxDiagLinear on CPU may be slow.")
 
     # Data
@@ -328,9 +328,16 @@ def main():
         temp_start = args.temp_start if args.temp_start is not None else args.temperature
         temp_min = args.temp_min if args.temp_min is not None else args.temp_end
         temp_max = args.temp_max if args.temp_max is not None else temp_start
+
+        schedule_epochs = args.epochs
+        if args.alpha_freeze_mode == "at_epoch":
+            schedule_epochs = max(1, int(args.alpha_freeze_epoch))
+        elif args.alpha_freeze_mode == "at_start":
+            schedule_epochs = 1
+
         temp_sched = TemperatureScheduler(
             scheme=args.temp_schedule,
-            total_epochs=args.epochs,
+            total_epochs=schedule_epochs,
             temp_start=temp_start,
             temp_end=args.temp_end,
             temp_min=temp_min,
@@ -393,7 +400,9 @@ def main():
     for epoch in range(1, args.epochs + 1):
         current_temp = None
         if uses_temp_layers and temp_sched is not None:
-            current_temp = temp_sched.get(epoch - 1)
+            # Clamp scheduling after it completes (e.g., at freeze epoch)
+            e = min(max(0, epoch - 1), temp_sched.total_epochs - 1)
+            current_temp = temp_sched.get(e)
             for layer in iter_temp_layers(model):
                 layer.set_temperature(current_temp)
 
