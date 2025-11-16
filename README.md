@@ -6,7 +6,7 @@ Use the `environment.yml` file to create a conda environment as:
 `conda env create -f environment.yml`
 
 # Usage
-To sparsify a lineary layer with DynaDiag, just specify `--linear-type temp_diag`, set sparsity for the layer and provide the temperatures and a temperature scheduler as shown in the MLP example below.
+To sparsify a linear layer with DynaDiag, just specify `--linear-type temp_diag`, set sparsity for the layer, and provide the temperatures and a temperature scheduler as shown in the MLP example below.
 
 # MLP Example
 
@@ -33,7 +33,7 @@ python mlp.py \
 Notes: the script will download MNIST to `--data-dir` if missing. Use `--linear-type dense` for a dense baseline, and `--force-cpu` to run on CPU.
 
 # ToDos
-1) MLP Example (without speedup)
-2) CUDA Kernel
-3) Integrated CUDA kernel in PyTorch
+1) MLP Mixer
+2) ViTs
+3) CUDA Kernels
 4) Upload the pre-trained models
